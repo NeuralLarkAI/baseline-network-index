@@ -1,11 +1,10 @@
-import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { Connection } from "@solana/web3.js";
-
-type Trend = "up" | "down" | "flat";
+export const config = {
+  runtime: "nodejs",
+};
 
 const PUBLIC_RPC = "https://api.mainnet-beta.solana.com";
 
-function validUrl(url?: string) {
+function validUrl(url) {
   if (!url) return null;
   try {
     new URL(url);
@@ -15,22 +14,47 @@ function validUrl(url?: string) {
   }
 }
 
-async function sampleRpc(name: string, url: string) {
-  const start = Date.now();
-  const conn = new Connection(url, "confirmed");
+async function rpcCall(url, method, params = []) {
+  const body = {
+    jsonrpc: "2.0",
+    id: 1,
+    method,
+    params,
+  };
 
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const json = await res.json();
+  if (json.error) throw new Error(json.error.message || "RPC error");
+  return json.result;
+}
+
+async function sampleRpc(name, url) {
+  const start = Date.now();
   try {
-    await conn.getSlot(); // minimal, fast, meaningful
+    await rpcCall(url, "getSlot", [{ commitment: "confirmed" }]);
     const latencyMs = Date.now() - start;
-    return { name, ok: true, latencyMs, errorRate: 0.8, trend: "flat" as Trend };
+
+    return {
+      name,
+      ok: true,
+      latencyMs,
+      errorRate: 0.8,
+      trend: "flat",
+    };
   } catch {
     const latencyMs = Date.now() - start;
     return {
       name,
       ok: false,
       latencyMs: Math.max(999, latencyMs),
-      errorRate: 5,
-      trend: "down" as Trend,
+      errorRate: 5.0,
+      trend: "down",
     };
   }
 }
@@ -44,19 +68,13 @@ function fallbackResponse() {
     retryPressure: "Low",
     updatedSecondsAgo: 10,
     rpcRankings: [
-      {
-        name: "Public RPC",
-        health: 75,
-        latencyMs: 650,
-        errorRate: 3.0,
-        trend: "flat" as Trend,
-      },
+      { name: "Public RPC", health: 75, latencyMs: 650, errorRate: 3.0, trend: "flat" },
     ],
     context: "Live sampling unavailable. Serving fallback execution context.",
   };
 }
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+export default async function handler(req, res) {
   try {
     const helius = validUrl(process.env.HELIUS_RPC);
     const quicknode = validUrl(process.env.QUICKNODE_RPC);
@@ -78,6 +96,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       ? healthy.reduce((sum, s) => sum + s.latencyMs, 0) / healthy.length
       : 999;
 
+    // Simple, explainable Phase 2 NQI:
     let nqi = 100 - avgLatency / 10 - (100 - successRate) * 1.5;
     nqi = Math.max(0, Math.min(100, nqi));
 
@@ -105,7 +124,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           : "Latency instability detected. Execution quality is degraded.",
     });
   } catch {
-    // Never crash — always return JSON so the UI stays alive.
     res.status(200).json(fallbackResponse());
   }
 }
