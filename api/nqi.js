@@ -278,11 +278,11 @@ if (pub) {
     updatedSecondsAgo: 0,
     rpcRankings,
     context:
-      stability === "Stable"
-        ? "Transaction execution remains above baseline. Current conditions favor standard routing."
-        : stability === "Volatile"
-        ? "Latency volatility detected. Consider conservative routing during congestion."
-        : "Execution quality is degraded. Expect higher retries and inconsistent confirmation latency.",
+  stability === "Stable" && overallSuccessRate >= 95
+    ? "Transaction execution remains above baseline. Current conditions favor standard routing."
+    : stability === "Stable" && overallSuccessRate >= 88
+    ? "Execution is stable, but elevated retries detected on some routes."
+    : "Execution quality is stressed. Expect retries and inconsistent confirmation latency.",
 
     // Deployment stamp (proves whether UI is hitting multiple deployments)
     build: process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 7) || "local",
