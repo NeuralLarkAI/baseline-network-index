@@ -1,64 +1,41 @@
-import { NetworkQualityIndex } from '@/types/network';
+import { useNetworkData } from "@/hooks/useNetworkData";
 
-interface HeroMetricProps {
-  nqi: NetworkQualityIndex;
-}
+export default function HeroMetric() {
+  const { data } = useNetworkData();
 
-const statusText = {
-  above: 'Conditions above baseline',
-  at: 'Conditions at baseline',
-  below: 'Conditions below baseline',
-};
+  if (!data) return null;
 
-const statusColor = {
-  above: 'text-success',
-  at: 'text-muted-foreground',
-  below: 'text-warning',
-};
+  const { nqi, updatedSecondsAgo } = data;
 
-export function HeroMetric({ nqi }: HeroMetricProps) {
-  const formattedTime = new Date(nqi.lastUpdated).toLocaleTimeString('en-US', {
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    hour12: false,
-  });
+  // Context logic — calm, not reactive
+  let contextText = "Transaction quality near baseline.";
+
+  if (nqi >= 85) {
+    contextText = "Transaction quality above baseline.";
+  } else if (nqi <= 70) {
+    contextText = "Transaction quality below baseline.";
+  }
 
   return (
-    <section className="text-center py-16 border-b border-border">
-      <div className="space-y-1 mb-8">
-        <p className="text-xs font-mono text-muted-foreground uppercase tracking-widest">
-          Network Quality Index
-        </p>
-        <h1 className="text-sm font-medium text-foreground/70">BASELINE NQI</h1>
+    <section className="w-full flex flex-col items-center justify-center py-24 text-center">
+      {/* Label */}
+      <div className="text-xs tracking-widest uppercase text-neutral-500 mb-4">
+        Baseline Network Quality Index
       </div>
 
-      <div className="space-y-4">
-        <p className="font-mono text-8xl md:text-9xl font-semibold tracking-tighter text-foreground">
-          {nqi.score.toFixed(1)}
-        </p>
-        
-        <div className="space-y-2">
-          <p className={`text-sm font-medium ${statusColor[nqi.status]}`}>
-            {statusText[nqi.status]}
-          </p>
-          <p className="text-xs font-mono text-muted-foreground">
-            Last updated {formattedTime} UTC
-          </p>
-        </div>
+      {/* Main Metric */}
+      <div className="text-7xl md:text-8xl font-semibold text-neutral-100 tabular-nums">
+        {nqi.toFixed(1)}
       </div>
 
-      <div className="mt-8 flex justify-center">
-        <div className="flex items-center gap-6 text-xs font-mono text-muted-foreground">
-          <span>0</span>
-          <div className="w-48 h-px bg-border relative">
-            <div 
-              className="absolute top-1/2 -translate-y-1/2 w-1 h-3 bg-primary"
-              style={{ left: `${nqi.score}%` }}
-            />
-          </div>
-          <span>100</span>
-        </div>
+      {/* Context */}
+      <div className="mt-6 text-sm text-neutral-400">
+        {contextText}
+      </div>
+
+      {/* Timestamp */}
+      <div className="mt-2 text-xs text-neutral-600">
+        Updated {updatedSecondsAgo}s ago
       </div>
     </section>
   );
