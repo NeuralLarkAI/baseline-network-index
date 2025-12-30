@@ -218,7 +218,22 @@ export default async function handler(req, res) {
   const overallSuccessRate = 100 - mean(samples.map((s) => s.failPct));
 
   // Raw NQI
-  let nqi = mean(samples.map((s) => s.health));
+  const quick = samples.find((s) => s.name === "QuickNode");
+const heli = samples.find((s) => s.name === "Helius");
+const pub = samples.find((s) => s.name === "Public RPC");
+
+const premium = [quick, heli].filter(Boolean);
+const premiumMean = premium.length ? mean(premium.map((s) => s.health)) : mean(samples.map((s) => s.health));
+
+// Headline is driven by premium routes; public is a light penalty signal.
+let nqi = premiumMean;
+
+// If public is failing badly, apply a small penalty (doesn't dominate).
+if (pub) {
+  if (pub.failPct >= 30) nqi -= 4;
+  else if (pub.failPct >= 15) nqi -= 2;
+}
+
 
   const stability = stabilityLabel(best.scoredLatency, best.jitterMs, best.failPct);
   if (stability === "Volatile") nqi -= 3;
