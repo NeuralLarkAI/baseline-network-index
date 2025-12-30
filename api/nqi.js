@@ -4,6 +4,7 @@ const PUBLIC_RPC = "https://api.mainnet-beta.solana.com";
 const TIMEOUT_MS = 2500;
 const SAMPLES_PER_PROVIDER = 7;
 const SLEEP_MS = 120;
+const DISPLAY_FLOOR_MS = 20;
 
 // Baseline: don't reward datacenter proximity for scoring.
 // We floor latency for scoring, but still display the true measured median.
@@ -229,7 +230,7 @@ export default async function handler(req, res) {
     .map((s, idx) => ({
       name: s.name,
       health: s.health,
-      latencyMs: s.rawMedian, // display true measured median
+      latencyMs: Math.max(DISPLAY_FLOOR_MS, s.rawMedian), // display true measured median
       errorRate: s.failPct,   // % failures in sample
       trend: idx === 0 ? "up" : "flat",
     }));
