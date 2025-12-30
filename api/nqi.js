@@ -66,18 +66,22 @@ function stdev(arr) {
 }
 
 function latencyScore(ms) {
-  // Score based on "execution latency" (scoredLatency already floored).
-  // Curve tuned so stable conditions read high but congestion still punishes.
+  // Scored latency is already floored (EXECUTION_FLOOR_MS),
+  // so stable conditions should read high — but congestion should still punish.
   const x = clamp(ms, 50, 2500);
 
-  // ~120ms -> ~92
-  // 300ms  -> ~84
-  // 600ms  -> ~74
-  // 1000ms -> ~65
-  // 2000ms -> ~49
-  const score = 118 - 22 * Math.log10(x);
+  // Tuned curve:
+  // 120ms  -> ~87
+  // 300ms  -> ~79
+  // 600ms  -> ~71
+  // 900ms  -> ~68 (then stability penalty kicks in)
+  // 1500ms -> ~63
+  // 2500ms -> ~58
+  const score = 133 - 22 * Math.log10(x);
+
   return clamp(score, 0, 100);
 }
+
 
 function jitterScore(jitterMs) {
   const x = clamp(jitterMs, 0, 300);
