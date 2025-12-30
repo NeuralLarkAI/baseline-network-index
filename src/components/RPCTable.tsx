@@ -1,92 +1,99 @@
-import { RPCProvider } from '@/types/network';
+import { useNetworkData } from "@/hooks/useNetworkData";
 
-interface RPCTableProps {
-  providers: RPCProvider[];
+function trendSymbol(trend: "up" | "down" | "flat") {
+  if (trend === "up") return "↑";
+  if (trend === "down") return "↓";
+  return "→";
 }
 
-export function RPCTable({ providers }: RPCTableProps) {
-  const getTrendSymbol = (trend: RPCProvider['trend']) => {
-    switch (trend) {
-      case 'up':
-        return '↑';
-      case 'down':
-        return '↓';
-      default:
-        return '→';
-    }
-  };
+export default function RPCTable() {
+  const { data } = useNetworkData();
 
-  const getTrendClass = (trend: RPCProvider['trend']) => {
-    switch (trend) {
-      case 'up':
-        return 'text-success';
-      case 'down':
-        return 'text-destructive';
-      default:
-        return 'text-muted-foreground';
-    }
-  };
+  if (!data) return null;
 
-  const getHealthClass = (score: number) => {
-    if (score >= 90) return 'text-foreground';
-    if (score >= 80) return 'text-secondary-foreground';
-    return 'text-warning';
-  };
+  const { rpcRankings } = data;
 
   return (
-    <section className="py-12 border-b border-border">
-      <div className="mb-6">
-        <h2 className="text-xs font-mono text-muted-foreground uppercase tracking-widest">
-          RPC Execution Quality
-        </h2>
+    <section className="w-full max-w-4xl mx-auto mt-32">
+      <div className="mb-6 text-xs tracking-widest uppercase text-neutral-500">
+        RPC Execution Quality
       </div>
 
-      <div className="card-surface overflow-hidden">
-        <table className="w-full table-terminal">
-          <thead>
-            <tr className="border-b border-border text-left">
-              <th className="px-4 py-3 text-xs text-muted-foreground font-medium">Provider</th>
-              <th className="px-4 py-3 text-xs text-muted-foreground font-medium text-right">Health</th>
-              <th className="px-4 py-3 text-xs text-muted-foreground font-medium text-right">Avg Latency</th>
-              <th className="px-4 py-3 text-xs text-muted-foreground font-medium text-right">Error Rate</th>
-              <th className="px-4 py-3 text-xs text-muted-foreground font-medium text-right">Trend</th>
+      <div className="border border-neutral-800 rounded-sm overflow-hidden">
+        <table className="w-full text-sm">
+          <thead className="bg-neutral-900 text-neutral-500">
+            <tr>
+              <th className="px-4 py-3 text-left font-normal">
+                Provider
+              </th>
+              <th className="px-4 py-3 text-right font-normal">
+                Health
+              </th>
+              <th className="px-4 py-3 text-right font-normal">
+                Avg Latency
+              </th>
+              <th className="px-4 py-3 text-right font-normal">
+                Error Rate
+              </th>
+              <th className="px-4 py-3 text-right font-normal">
+                Trend
+              </th>
             </tr>
           </thead>
-          <tbody>
-            {providers.map((provider) => (
-              <tr 
-                key={provider.name} 
-                className={`border-b border-border last:border-b-0 ${
-                  provider.isPreferred ? 'bg-primary/5' : ''
-                }`}
-              >
-                <td className="px-4 py-3">
-                  <div className="flex items-center gap-2">
-                    {provider.isPreferred && (
-                      <span className="text-primary text-xs">●</span>
+
+          <tbody className="divide-y divide-neutral-800">
+            {rpcRankings.map((rpc) => {
+              const isPreferred = rpc.health >= 90;
+
+              return (
+                <tr
+                  key={rpc.name}
+                  className={
+                    isPreferred
+                      ? "bg-neutral-900/40"
+                      : "bg-transparent"
+                  }
+                >
+                  {/* Provider */}
+                  <td className="px-4 py-3 text-neutral-200">
+                    {rpc.name}
+                    {isPreferred && (
+                      <span className="ml-2 text-xs text-neutral-500">
+                        (Preferred Route)
+                      </span>
                     )}
-                    <span className={provider.isPreferred ? 'text-primary' : 'text-foreground'}>
-                      {provider.name}
-                    </span>
-                    {provider.isPreferred && (
-                      <span className="text-xs text-muted-foreground">(Preferred Route)</span>
-                    )}
-                  </div>
-                </td>
-                <td className={`px-4 py-3 text-right ${getHealthClass(provider.healthScore)}`}>
-                  {provider.healthScore}
-                </td>
-                <td className="px-4 py-3 text-right text-secondary-foreground">
-                  {provider.avgLatency}<span className="text-muted-foreground ml-1">ms</span>
-                </td>
-                <td className="px-4 py-3 text-right text-secondary-foreground">
-                  {provider.errorRate.toFixed(1)}<span className="text-muted-foreground ml-1">%</span>
-                </td>
-                <td className={`px-4 py-3 text-right ${getTrendClass(provider.trend)}`}>
-                  {getTrendSymbol(provider.trend)}
-                </td>
-              </tr>
-            ))}
+                  </td>
+
+                  {/* Health */}
+                  <td className="px-4 py-3 text-right font-mono text-neutral-200">
+                    {rpc.health}
+                  </td>
+
+                  {/* Latency */}
+                  <td className="px-4 py-3 text-right font-mono text-neutral-300">
+                    {rpc.latencyMs} ms
+                  </td>
+
+                  {/* Error Rate */}
+                  <td className="px-4 py-3 text-right font-mono text-neutral-300">
+                    {rpc.errorRate.toFixed(1)}%
+                  </td>
+
+                  {/* Trend */}
+                  <td
+                    className={`px-4 py-3 text-right font-mono ${
+                      rpc.trend === "up"
+                        ? "text-neutral-400"
+                        : rpc.trend === "down"
+                        ? "text-neutral-500"
+                        : "text-neutral-600"
+                    }`}
+                  >
+                    {trendSymbol(rpc.trend)}
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
