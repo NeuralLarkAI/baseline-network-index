@@ -1,52 +1,54 @@
-import { Button } from '@/components/ui/button';
+import { useNetworkData } from "@/hooks/useNetworkData";
 
-export function DeveloperSection() {
-  const exampleCode = `GET /v1/baseline/nqi
-
-Response:
-{
-  "nqi": 78.4,
-  "status": "above",
-  "indicators": { ... },
-  "timestamp": "2024-01-15T14:32:00Z"
-}`;
+export default function DeveloperSection() {
+  const { data } = useNetworkData();
+  if (!data) return null;
 
   return (
-    <section className="py-12">
-      <div className="mb-6">
-        <h2 className="text-xs font-mono text-muted-foreground uppercase tracking-widest">
-          Developer Access
-        </h2>
+    <section className="w-full max-w-5xl mx-auto mt-32 mb-32">
+      <div className="mb-6 text-xs tracking-widest uppercase text-neutral-500">
+        Developer Access
       </div>
 
-      <div className="grid md:grid-cols-2 gap-8">
-        <div className="space-y-4">
-          <h3 className="text-lg font-medium text-foreground">
-            Baseline API
-          </h3>
-          <p className="text-sm text-secondary-foreground leading-relaxed">
-            Integrate network quality data into your applications. Route transactions 
-            based on real-time execution conditions, optimize retry logic, and provide 
-            users with transparent quality metrics.
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-8 border-t border-neutral-800 pt-8">
+        <div>
+          <div className="text-lg text-neutral-100 mb-3">Baseline API</div>
+
+          <p className="text-sm leading-relaxed text-neutral-400">
+            Integrate network quality context into your applications. Route transactions
+            based on real-time execution conditions and provide users with transparent
+            quality metrics.
           </p>
-          <p className="text-sm text-secondary-foreground leading-relaxed">
-            The Baseline API returns current NQI scores, quality indicators, and 
-            provider health metrics. Data updates every 10 seconds with historical 
-            access available for trend analysis.
+
+          <p className="text-sm leading-relaxed text-neutral-500 mt-4">
+            The Baseline API returns current NQI scores, indicator states, and provider
+            health metrics. Data updates continuously.
           </p>
-          <div className="flex gap-3 pt-2">
-            <Button variant="outline" size="sm">
+
+          <div className="mt-6 flex gap-3">
+            <button className="px-4 py-2 text-xs border border-neutral-700 text-neutral-200 hover:border-neutral-500 transition">
               View Documentation
-            </Button>
-            <Button variant="ghost" size="sm">
+            </button>
+            <button className="px-4 py-2 text-xs border border-neutral-800 text-neutral-400 hover:text-neutral-200 hover:border-neutral-700 transition">
               Request Access
-            </Button>
+            </button>
           </div>
         </div>
 
-        <div className="card-surface p-4">
-          <pre className="text-xs font-mono text-muted-foreground overflow-x-auto">
-            {exampleCode}
+        <div className="border border-neutral-800 bg-neutral-950/40 p-4 font-mono text-xs text-neutral-300 overflow-auto">
+          <div className="text-neutral-500 mb-3">GET /v1/baseline/nqi</div>
+          <pre className="whitespace-pre-wrap leading-relaxed">
+{`{
+  "nqi": 79.1,
+  "status": "near_baseline",
+  "indicators": {
+    "successRate": 95.4,
+    "latencyStability": "Stable",
+    "feeEfficiency": 0.000024,
+    "retryPressure": "Low"
+  },
+  "timestamp": "2025-12-30T02:46:36Z"
+}`}
           </pre>
         </div>
       </div>
