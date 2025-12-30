@@ -29,7 +29,8 @@ export function useNetworkData() {
 
     async function load() {
       try {
-        const res = await fetch("/api/nqi", { cache: "no-store" });
+        const res = await fetch("/api/nqi-edge", { cache: "no-store" })
+;
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const json = (await res.json()) as NetworkData;
 
