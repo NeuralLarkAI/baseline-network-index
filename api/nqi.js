@@ -5,8 +5,8 @@ const TIMEOUT_MS = 2500;
 const SAMPLES_PER_PROVIDER = 7;
 const SLEEP_MS = 120;
 
-// Baseline principle: proximity < execution reality.
-// We don't reward sub-floor latency; we treat it as "good enough".
+// Baseline: don't reward proximity below this for scoring,
+// but still display the real measured latency.
 const EXECUTION_FLOOR_MS = 80;
 
 function validUrl(url) {
@@ -90,8 +90,8 @@ function stabilityLabel(medLatency, jitterMs, failPct) {
   return "Stable";
 }
 
-function computeHealth(medLatency, jitterMs, failPct) {
-  const ls = latencyScore(medLatency);
+function computeHealth(scoredLatency, jitterMs, failPct) {
+  const ls = latencyScore(scoredLatency);
   const js = jitterScore(jitterMs);
   const fs = failureScore(failPct);
   return Math.round(ls * 0.52 + fs * 0.33 + js * 0.15);
@@ -119,25 +119,26 @@ async function sampleProvider(name, url) {
     return {
       name,
       ok: false,
-      medLatency: 2000,
+      rawMedian: 2000,
+      scoredLatency: 2000,
       jitterMs: 300,
       failPct: 100,
       health: 0,
     };
   }
 
-  // Apply execution floor here
   const rawMedian = Math.round(median(latencies));
-  const medLatency = Math.max(EXECUTION_FLOOR_MS, rawMedian);
+  const scoredLatency = Math.max(EXECUTION_FLOOR_MS, rawMedian);
 
   const jitterMs = Math.round(stdev(latencies));
   const failPct = Number(((failures / SAMPLES_PER_PROVIDER) * 100).toFixed(1));
-  const health = computeHealth(medLatency, jitterMs, failPct);
+  const health = computeHealth(scoredLatency, jitterMs, failPct);
 
   return {
     name,
     ok: failPct < 50,
-    medLatency,
+    rawMedian,
+    scoredLatency,
     jitterMs,
     failPct,
     health,
@@ -162,23 +163,23 @@ export default async function handler(req, res) {
 
   const best = [...samples].sort((a, b) => b.health - a.health)[0];
 
-  const overallSuccessRate =
-    100 - mean(samples.map((s) => s.failPct));
+  const overallSuccessRate = 100 - mean(samples.map((s) => s.failPct));
 
   let nqi = mean(samples.map((s) => s.health));
 
-  const stability = stabilityLabel(best.medLatency, best.jitterMs, best.failPct);
+  const stability = stabilityLabel(best.scoredLatency, best.jitterMs, best.failPct);
   if (stability === "Volatile") nqi -= 3;
   if (stability === "Degrading") nqi -= 7;
 
   nqi = clamp(nqi, 0, 98);
 
+  // Display raw median latency, but keep scoring based on floored latency.
   const rpcRankings = samples
     .sort((a, b) => b.health - a.health)
     .map((s, idx) => ({
       name: s.name,
       health: s.health,
-      latencyMs: s.medLatency,
+      latencyMs: s.rawMedian,
       errorRate: s.failPct,
       trend: idx === 0 ? "up" : "flat",
     }));
@@ -210,7 +211,8 @@ export default async function handler(req, res) {
       generationSeconds,
       best: {
         name: best.name,
-        medLatency: best.medLatency,
+        rawMedian: best.rawMedian,
+        scoredLatency: best.scoredLatency,
         jitterMs: best.jitterMs,
         failPct: best.failPct,
         health: best.health,
