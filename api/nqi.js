@@ -2,8 +2,12 @@ export const config = { runtime: "nodejs" };
 
 const PUBLIC_RPC = "https://api.mainnet-beta.solana.com";
 const TIMEOUT_MS = 2500;
-const SAMPLES_PER_PROVIDER = 7; // slightly higher to reduce luck
+const SAMPLES_PER_PROVIDER = 7;
 const SLEEP_MS = 120;
+
+// Baseline principle: proximity < execution reality.
+// We don't reward sub-floor latency; we treat it as "good enough".
+const EXECUTION_FLOOR_MS = 80;
 
 function validUrl(url) {
   if (!url) return null;
@@ -61,36 +65,18 @@ function stdev(arr) {
   return Math.sqrt(v);
 }
 
-/**
- * Log-scaled latency score:
- * - 20ms → ~96
- * - 50ms → ~92
- * - 100ms → ~86
- * - 200ms → ~78
- * - 500ms → ~62
- * - 1000ms → ~48
- * - 2000ms → ~34
- */
 function latencyScore(ms) {
   const x = clamp(ms, 5, 2500);
-  const score = 110 - 20 * Math.log10(x); // log curve
+  const score = 110 - 20 * Math.log10(x);
   return clamp(score, 0, 100);
 }
 
-/**
- * Jitter score:
- * 0–25ms jitter is fine; >250ms is bad.
- */
 function jitterScore(jitterMs) {
   const x = clamp(jitterMs, 0, 300);
   const score = 100 - (x / 250) * 100;
   return clamp(score, 0, 100);
 }
 
-/**
- * Failure score:
- * 0% → 100, 10% → 75, 25% → 40, 40%+ → ~0
- */
 function failureScore(failPct) {
   const x = clamp(failPct, 0, 50);
   const score = 100 - (x / 40) * 100;
@@ -108,8 +94,6 @@ function computeHealth(medLatency, jitterMs, failPct) {
   const ls = latencyScore(medLatency);
   const js = jitterScore(jitterMs);
   const fs = failureScore(failPct);
-
-  // Weights tuned for “execution conditions”
   return Math.round(ls * 0.52 + fs * 0.33 + js * 0.15);
 }
 
@@ -119,10 +103,7 @@ async function sampleProvider(name, url) {
 
   for (let i = 0; i < SAMPLES_PER_PROVIDER; i++) {
     const method = i % 2 === 0 ? "getLatestBlockhash" : "getSlot";
-    const params =
-      method === "getLatestBlockhash"
-        ? [{ commitment: "confirmed" }]
-        : [{ commitment: "confirmed" }];
+    const params = [{ commitment: "confirmed" }];
 
     const start = Date.now();
     try {
@@ -145,7 +126,10 @@ async function sampleProvider(name, url) {
     };
   }
 
-  const medLatency = Math.round(median(latencies));
+  // Apply execution floor here
+  const rawMedian = Math.round(median(latencies));
+  const medLatency = Math.max(EXECUTION_FLOOR_MS, rawMedian);
+
   const jitterMs = Math.round(stdev(latencies));
   const failPct = Number(((failures / SAMPLES_PER_PROVIDER) * 100).toFixed(1));
   const health = computeHealth(medLatency, jitterMs, failPct);
@@ -165,8 +149,8 @@ export default async function handler(req, res) {
   const quicknode = validUrl(process.env.QUICKNODE_RPC);
 
   const providers = [
-    ...(helius ? [{ name: "Helius", url: helius }] : []),
     ...(quicknode ? [{ name: "QuickNode", url: quicknode }] : []),
+    ...(helius ? [{ name: "Helius", url: helius }] : []),
     { name: "Public RPC", url: PUBLIC_RPC },
   ];
 
@@ -181,14 +165,12 @@ export default async function handler(req, res) {
   const overallSuccessRate =
     100 - mean(samples.map((s) => s.failPct));
 
-  // NQI is “average health”, with mild penalty if best route is unstable
   let nqi = mean(samples.map((s) => s.health));
 
   const stability = stabilityLabel(best.medLatency, best.jitterMs, best.failPct);
   if (stability === "Volatile") nqi -= 3;
   if (stability === "Degrading") nqi -= 7;
 
-  // Avoid perfect scores in infra indexes
   nqi = clamp(nqi, 0, 98);
 
   const rpcRankings = samples
@@ -197,17 +179,20 @@ export default async function handler(req, res) {
       name: s.name,
       health: s.health,
       latencyMs: s.medLatency,
-      errorRate: s.failPct, // now real (% failures)
+      errorRate: s.failPct,
       trend: idx === 0 ? "up" : "flat",
     }));
 
-  const generationSeconds = Math.max(1, Math.round((Date.now() - started) / 1000));
+  const generationSeconds = Math.max(
+    1,
+    Math.round((Date.now() - started) / 1000)
+  );
 
   res.status(200).json({
     nqi: Number(nqi.toFixed(1)),
     successRate: Number(clamp(overallSuccessRate, 0, 100).toFixed(1)),
     latencyStability: stability,
-    feeEfficiency: 0.00002, // keep placeholder for now
+    feeEfficiency: 0.00002,
     retryPressure:
       overallSuccessRate >= 97 ? "Low" : overallSuccessRate >= 90 ? "Medium" : "High",
     updatedSecondsAgo: 0,
@@ -221,6 +206,7 @@ export default async function handler(req, res) {
     debug: {
       samplesPerProvider: SAMPLES_PER_PROVIDER,
       timeoutMs: TIMEOUT_MS,
+      executionFloorMs: EXECUTION_FLOOR_MS,
       generationSeconds,
       best: {
         name: best.name,
