@@ -5,8 +5,7 @@ const TIMEOUT_MS = 2500;
 const SAMPLES_PER_PROVIDER = 7;
 const SLEEP_MS = 120;
 
-// Baseline: don't reward proximity below this for scoring,
-// but still display the real measured latency.
+// Scoring floor: don't reward sub-floor proximity
 const EXECUTION_FLOOR_MS = 80;
 
 function validUrl(url) {
@@ -83,32 +82,46 @@ function failureScore(failPct) {
   return clamp(score, 0, 100);
 }
 
-function stabilityLabel(medLatency, jitterMs, failPct) {
+// Slot-lag score: 0 lag = 100; 50 slots lag = ~70; 150+ = ~0
+function slotLagPenalty(slotLag) {
+  const x = clamp(slotLag, 0, 200);
+  // penalty is 0..25 points
+  return (x / 200) * 25;
+}
+
+function stabilityLabel(scoredLatency, jitterMs, failPct) {
   if (failPct >= 15) return "Degrading";
-  if (medLatency >= 900) return "Degrading";
+  if (scoredLatency >= 900) return "Degrading";
   if (jitterMs >= 180) return "Volatile";
   return "Stable";
 }
 
-function computeHealth(scoredLatency, jitterMs, failPct) {
+function computeBaseHealth(scoredLatency, jitterMs, failPct) {
   const ls = latencyScore(scoredLatency);
   const js = jitterScore(jitterMs);
   const fs = failureScore(failPct);
-  return Math.round(ls * 0.52 + fs * 0.33 + js * 0.15);
+  return ls * 0.52 + fs * 0.33 + js * 0.15;
 }
 
 async function sampleProvider(name, url) {
   const latencies = [];
+  const slots = [];
   let failures = 0;
 
   for (let i = 0; i < SAMPLES_PER_PROVIDER; i++) {
+    // Alternate heavier and lighter calls
     const method = i % 2 === 0 ? "getLatestBlockhash" : "getSlot";
     const params = [{ commitment: "confirmed" }];
 
     const start = Date.now();
     try {
-      await rpcCall(url, method, params);
+      const result = await rpcCall(url, method, params);
+
+      // record latency
       latencies.push(Date.now() - start);
+
+      // record slot (best effort)
+      if (method === "getSlot") slots.push(result);
     } catch {
       failures += 1;
     }
@@ -123,6 +136,7 @@ async function sampleProvider(name, url) {
       scoredLatency: 2000,
       jitterMs: 300,
       failPct: 100,
+      slotMedian: 0,
       health: 0,
     };
   }
@@ -132,7 +146,10 @@ async function sampleProvider(name, url) {
 
   const jitterMs = Math.round(stdev(latencies));
   const failPct = Number(((failures / SAMPLES_PER_PROVIDER) * 100).toFixed(1));
-  const health = computeHealth(scoredLatency, jitterMs, failPct);
+  const slotMedian = slots.length ? Math.round(median(slots)) : 0;
+
+  // Base health (no slot lag yet)
+  const base = computeBaseHealth(scoredLatency, jitterMs, failPct);
 
   return {
     name,
@@ -141,7 +158,9 @@ async function sampleProvider(name, url) {
     scoredLatency,
     jitterMs,
     failPct,
-    health,
+    slotMedian,
+    baseHealth: base,
+    health: Math.round(base), // temporary; we adjust after we know lag
   };
 }
 
@@ -157,37 +176,48 @@ export default async function handler(req, res) {
 
   const started = Date.now();
 
-  const samples = await Promise.all(
-    providers.map((p) => sampleProvider(p.name, p.url))
-  );
+  let samples = await Promise.all(providers.map((p) => sampleProvider(p.name, p.url)));
+
+  // Determine freshest slot across providers
+  const bestSlot = Math.max(...samples.map((s) => s.slotMedian || 0));
+
+  // Apply slot lag penalty
+  samples = samples.map((s) => {
+    const slotLag = s.slotMedian ? Math.max(0, bestSlot - s.slotMedian) : 200;
+    const penalty = slotLagPenalty(slotLag);
+    const adjusted = clamp(s.baseHealth - penalty, 0, 100);
+
+    return {
+      ...s,
+      slotLag,
+      health: Math.round(adjusted),
+      slotPenalty: Number(penalty.toFixed(1)),
+    };
+  });
 
   const best = [...samples].sort((a, b) => b.health - a.health)[0];
 
   const overallSuccessRate = 100 - mean(samples.map((s) => s.failPct));
 
   let nqi = mean(samples.map((s) => s.health));
-
   const stability = stabilityLabel(best.scoredLatency, best.jitterMs, best.failPct);
+
   if (stability === "Volatile") nqi -= 3;
   if (stability === "Degrading") nqi -= 7;
 
   nqi = clamp(nqi, 0, 98);
 
-  // Display raw median latency, but keep scoring based on floored latency.
   const rpcRankings = samples
     .sort((a, b) => b.health - a.health)
     .map((s, idx) => ({
       name: s.name,
       health: s.health,
-      latencyMs: s.rawMedian,
-      errorRate: s.failPct,
+      latencyMs: s.rawMedian,     // display real median
+      errorRate: s.failPct,       // real failure %
       trend: idx === 0 ? "up" : "flat",
     }));
 
-  const generationSeconds = Math.max(
-    1,
-    Math.round((Date.now() - started) / 1000)
-  );
+  const generationSeconds = Math.max(1, Math.round((Date.now() - started) / 1000));
 
   res.status(200).json({
     nqi: Number(nqi.toFixed(1)),
@@ -209,12 +239,26 @@ export default async function handler(req, res) {
       timeoutMs: TIMEOUT_MS,
       executionFloorMs: EXECUTION_FLOOR_MS,
       generationSeconds,
+      bestSlot,
+      providers: samples.map((s) => ({
+        name: s.name,
+        rawMedian: s.rawMedian,
+        scoredLatency: s.scoredLatency,
+        jitterMs: s.jitterMs,
+        failPct: s.failPct,
+        slotMedian: s.slotMedian,
+        slotLag: s.slotLag,
+        slotPenalty: s.slotPenalty,
+        health: s.health,
+      })),
       best: {
         name: best.name,
         rawMedian: best.rawMedian,
         scoredLatency: best.scoredLatency,
         jitterMs: best.jitterMs,
         failPct: best.failPct,
+        slotMedian: best.slotMedian,
+        slotLag: best.slotLag,
         health: best.health,
       },
     },
