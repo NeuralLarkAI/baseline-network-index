@@ -1,27 +1,57 @@
-import { mockNetworkData } from "@/data/mockData";
+import { useEffect, useState } from "react";
 
-type NetworkData = typeof mockNetworkData;
+type RpcRow = {
+  name: string;
+  health: number;
+  latencyMs: number;
+  errorRate: number;
+  trend: "up" | "down" | "flat";
+};
 
-export function useNetworkData(): {
-  data: NetworkData | null;
-  isLoading: boolean;
-  error: string | null;
-} {
-  /**
-   * Phase 1:
-   * Local, deterministic data.
-   * This guarantees UI stability while we finalize scoring.
-   *
-   * Phase 2:
-   * Replace with fetch("/api/nqi")
-   * without touching any components.
-   */
+export type NetworkData = {
+  nqi: number;
+  successRate: number;
+  latencyStability: string;
+  feeEfficiency: number;
+  retryPressure: string;
+  updatedSecondsAgo: number;
+  rpcRankings: RpcRow[];
+  context: string;
+  debug?: any;
+};
 
-  const data = mockNetworkData;
+export function useNetworkData() {
+  const [data, setData] = useState<NetworkData | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
-  return {
-    data,
-    isLoading: false,
-    error: null,
-  };
+  useEffect(() => {
+    let mounted = true;
+
+    async function load() {
+      try {
+        const res = await fetch("/api/nqi", { cache: "no-store" });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const json = (await res.json()) as NetworkData;
+
+        if (mounted) {
+          setData(json);
+          setError(null);
+          // TEMP DEBUG (remove later)
+          console.log("[Baseline] /api/nqi", json);
+        }
+      } catch (e: any) {
+        if (mounted) setError(e?.message || "Failed to load /api/nqi");
+      }
+    }
+
+    load();
+    const id = setInterval(load, 15000);
+
+    return () => {
+      mounted = false;
+      clearInterval(id);
+    };
+  }, []);
+
+  return { data, error, isLoading: !data && !error };
 }
