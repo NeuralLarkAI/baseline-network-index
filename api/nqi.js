@@ -4,11 +4,14 @@ const PUBLIC_RPC = "https://api.mainnet-beta.solana.com";
 const TIMEOUT_MS = 2500;
 const SAMPLES_PER_PROVIDER = 7;
 const SLEEP_MS = 120;
-const DISPLAY_FLOOR_MS = 20;
 
 // Baseline: don't reward datacenter proximity for scoring.
 // We floor latency for scoring, but still display the true measured median.
 const EXECUTION_FLOOR_MS = 120;
+
+// Smooth the headline NQI so it doesn’t whipsaw between samples
+let LAST_NQI = null;
+const EMA_ALPHA = 0.25; // 0.15 = smoother, 0.35 = snappier
 
 function validUrl(url) {
   if (!url) return null;
@@ -67,22 +70,20 @@ function stdev(arr) {
 }
 
 function latencyScore(ms) {
-  // Scored latency is already floored (EXECUTION_FLOOR_MS),
-  // so stable conditions should read high — but congestion should still punish.
+  // Scored latency is already floored (EXECUTION_FLOOR_MS).
+  // Curve tuned so stable conditions read high but congestion still punishes.
   const x = clamp(ms, 50, 2500);
 
   // Tuned curve:
   // 120ms  -> ~87
   // 300ms  -> ~79
   // 600ms  -> ~71
-  // 900ms  -> ~68 (then stability penalty kicks in)
   // 1500ms -> ~63
   // 2500ms -> ~58
   const score = 133 - 22 * Math.log10(x);
 
   return clamp(score, 0, 100);
 }
-
 
 function jitterScore(jitterMs) {
   const x = clamp(jitterMs, 0, 300);
@@ -216,6 +217,7 @@ export default async function handler(req, res) {
 
   const overallSuccessRate = 100 - mean(samples.map((s) => s.failPct));
 
+  // Raw NQI
   let nqi = mean(samples.map((s) => s.health));
 
   const stability = stabilityLabel(best.scoredLatency, best.jitterMs, best.failPct);
@@ -225,12 +227,18 @@ export default async function handler(req, res) {
   // Avoid perfect scores in infra indexes
   nqi = clamp(nqi, 0, 98);
 
+  // EMA smoothing (reduces 66 ↔ 92 whiplash)
+  if (LAST_NQI === null) LAST_NQI = nqi;
+  else LAST_NQI = LAST_NQI * (1 - EMA_ALPHA) + nqi * EMA_ALPHA;
+
+  const smoothedNqi = clamp(LAST_NQI, 0, 98);
+
   const rpcRankings = samples
     .sort((a, b) => b.health - a.health)
     .map((s, idx) => ({
       name: s.name,
       health: s.health,
-      latencyMs: Math.max(DISPLAY_FLOOR_MS, s.rawMedian), // display true measured median
+      latencyMs: s.rawMedian, // display true measured median
       errorRate: s.failPct,   // % failures in sample
       trend: idx === 0 ? "up" : "flat",
     }));
@@ -241,7 +249,12 @@ export default async function handler(req, res) {
   );
 
   res.status(200).json({
-    nqi: Number(nqi.toFixed(1)),
+    // Smoothed headline
+    nqi: Number(smoothedNqi.toFixed(1)),
+
+    // Still expose the raw score for debugging
+    nqiRaw: Number(nqi.toFixed(1)),
+
     successRate: Number(clamp(overallSuccessRate, 0, 100).toFixed(1)),
     latencyStability: stability,
     feeEfficiency: 0.00002,
@@ -255,10 +268,16 @@ export default async function handler(req, res) {
         : stability === "Volatile"
         ? "Latency volatility detected. Consider conservative routing during congestion."
         : "Execution quality is degraded. Expect higher retries and inconsistent confirmation latency.",
+
+    // Deployment stamp (proves whether UI is hitting multiple deployments)
+    build: process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 7) || "local",
+    deployment: process.env.VERCEL_URL || "unknown",
+
     debug: {
       samplesPerProvider: SAMPLES_PER_PROVIDER,
       timeoutMs: TIMEOUT_MS,
       executionFloorMs: EXECUTION_FLOOR_MS,
+      emaAlpha: EMA_ALPHA,
       generationSeconds,
       bestSlot,
       providers: samples.map((s) => ({
