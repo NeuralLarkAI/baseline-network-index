@@ -1,23 +1,21 @@
-export function Footer() {
+export default function Footer() {
   return (
-    <footer className="border-t border-border mt-auto">
-      <div className="container max-w-4xl py-8">
-        <div className="flex flex-col md:flex-row items-center justify-between gap-4">
-          <p className="text-xs text-muted-foreground">
-            Baseline provides neutral infrastructure quality metrics. 
-            Not financial advice.
-          </p>
-          <div className="flex items-center gap-6 text-xs font-mono text-muted-foreground">
-            <a href="#" className="hover:text-foreground transition-colors">
-              Documentation
-            </a>
-            <a href="#" className="hover:text-foreground transition-colors">
-              Status
-            </a>
-            <a href="#" className="hover:text-foreground transition-colors">
-              GitHub
-            </a>
-          </div>
+    <footer className="w-full border-t border-neutral-900 mt-24">
+      <div className="max-w-5xl mx-auto px-6 py-10 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+        <div className="text-xs text-neutral-600">
+          Baseline provides infrastructure context. Not financial advice.
+        </div>
+
+        <div className="flex gap-6 text-xs text-neutral-600">
+          <a className="hover:text-neutral-300 transition" href="#">
+            Documentation
+          </a>
+          <a className="hover:text-neutral-300 transition" href="#">
+            Status
+          </a>
+          <a className="hover:text-neutral-300 transition" href="#">
+            GitHub
+          </a>
         </div>
       </div>
     </footer>
