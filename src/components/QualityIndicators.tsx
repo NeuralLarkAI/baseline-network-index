@@ -57,4 +57,11 @@ export default function QualityIndicators() {
         <div className="flex items-center justify-between py-4 text-sm">
           <div className="text-neutral-400">Retry Pressure</div>
           <div className="flex items-center gap-4 font-mono">
-            <span className="
+            <span className="text-neutral-500">{formatDelta(deltas.retryPressure)}</span>
+            <span className="text-neutral-200">{retryPressure}</span>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
