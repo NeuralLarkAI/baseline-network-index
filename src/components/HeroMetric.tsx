@@ -3,6 +3,7 @@ import { useNetworkData } from "@/hooks/useNetworkData";
 export default function HeroMetric() {
   const { data } = useNetworkData();
   if (!data) return null;
+console.log("HERO /api/nqi data:", data);
 
   const { nqi, updatedSecondsAgo } = data;
 
