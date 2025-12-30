@@ -11,10 +11,10 @@ export default function QualityIndicators() {
 
   const { successRate, latencyStability, feeEfficiency, retryPressure } = data;
 
-  // Keep deltas subtle and quiet (hardcoded for now; later these come from real history)
+  // Phase 1 deltas (static). Phase 2 will compute from real history.
   const deltas = {
-    successRate: 0.4,
-    latencyStability: -5.7,
+    successRate: 0.6,
+    latencyStability: -7.3,
     feeEfficiency: -0.0,
     retryPressure: -0.9,
   };
