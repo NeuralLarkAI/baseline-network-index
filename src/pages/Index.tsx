@@ -30,7 +30,7 @@ const Index = () => {
       
       <main className="flex-1">
         <div className="container max-w-4xl">
-          <HeroMetric nqi={data.nqi} />
+          <HeroMetric />
           <QualityIndicators indicators={data.indicators} />
           <RPCTable providers={data.providers} />
           <Commentary commentary={data.commentary} />
