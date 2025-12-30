@@ -1,14 +1,14 @@
 import { Header } from '@/components/Header';
-import { HeroMetric } from '@/components/HeroMetric';
-import { QualityIndicators } from '@/components/QualityIndicators';
-import { RPCTable } from '@/components/RPCTable';
-import { Commentary } from '@/components/Commentary';
-import { DeveloperSection } from '@/components/DeveloperSection';
-import { Footer } from '@/components/Footer';
+import HeroMetric from '@/components/HeroMetric';
+import QualityIndicators from '@/components/QualityIndicators';
+import RPCTable from '@/components/RPCTable';
+import Commentary from '@/components/Commentary';
+import DeveloperSection from '@/components/DeveloperSection';
+import Footer from '@/components/Footer';
 import { useNetworkData } from '@/hooks/useNetworkData';
 
 const Index = () => {
-  const { data, isLoading, error } = useNetworkData();
+  const { isLoading, error } = useNetworkData();
 
   if (error) {
     return (
@@ -31,9 +31,9 @@ const Index = () => {
       <main className="flex-1">
         <div className="container max-w-4xl">
           <HeroMetric />
-          <QualityIndicators indicators={data.indicators} />
-          <RPCTable providers={data.providers} />
-          <Commentary commentary={data.commentary} />
+          <QualityIndicators />
+          <RPCTable />
+          <Commentary />
           <DeveloperSection />
         </div>
       </main>
