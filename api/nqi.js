@@ -65,10 +65,22 @@ function stdev(arr) {
 }
 
 function latencyScore(ms) {
-  const x = clamp(ms, 5, 2500);
-  const score = 110 - 20 * Math.log10(x);
+  // We score based on "execution latency", not datacenter proximity.
+  // With the floor in place, stable conditions should score high.
+  const x = clamp(ms, 50, 2500);
+
+  // New curve:
+  // 80ms  -> ~96
+  // 150ms -> ~92
+  // 300ms -> ~85
+  // 600ms -> ~75
+  // 1000ms-> ~66
+  // 2000ms-> ~50
+  const score = 118 - 22 * Math.log10(x);
+
   return clamp(score, 0, 100);
 }
+
 
 function jitterScore(jitterMs) {
   const x = clamp(jitterMs, 0, 300);
