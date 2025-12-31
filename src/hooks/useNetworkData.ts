@@ -27,10 +27,12 @@ const REQUEST_TIMEOUT_MS = 6000;
 export function useNetworkData() {
   const [data, setData] = useState<NetworkData | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [secondsAgo, setSecondsAgo] = useState(0);
 
-  // Prevent overlapping requests if a fetch runs long
   const inFlightRef = useRef(false);
+  const lastUpdateRef = useRef<number | null>(null);
 
+  // 🔁 Fetch network data
   useEffect(() => {
     let mounted = true;
 
@@ -39,7 +41,10 @@ export function useNetworkData() {
       inFlightRef.current = true;
 
       const controller = new AbortController();
-      const timeoutId = window.setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+      const timeoutId = window.setTimeout(
+        () => controller.abort(),
+        REQUEST_TIMEOUT_MS
+      );
 
       try {
         const res = await fetch(ENDPOINT, {
@@ -57,10 +62,17 @@ export function useNetworkData() {
         const json = (await res.json()) as NetworkData;
 
         if (mounted) {
-          setData(json);
+          lastUpdateRef.current = Date.now();
+          setSecondsAgo(0);
+
+          // override updatedSecondsAgo with client-tracked value
+          setData({
+            ...json,
+            updatedSecondsAgo: 0,
+          });
+
           setError(null);
-          // TEMP DEBUG (remove later)
-          console.log("[Baseline] " + ENDPOINT, json);
+          console.log("[Baseline] /api/nqi-edge", json);
         }
       } catch (e: any) {
         const msg =
@@ -84,5 +96,33 @@ export function useNetworkData() {
     };
   }, []);
 
-  return { data, error, isLoading: !data && !error };
+  // ⏱️ Increment updatedSecondsAgo every second
+  useEffect(() => {
+    const tick = window.setInterval(() => {
+      if (!lastUpdateRef.current) return;
+
+      const delta = Math.floor(
+        (Date.now() - lastUpdateRef.current) / 1000
+      );
+
+      setSecondsAgo(delta);
+
+      setData((prev) =>
+        prev
+          ? {
+              ...prev,
+              updatedSecondsAgo: delta,
+            }
+          : prev
+      );
+    }, 1000);
+
+    return () => window.clearInterval(tick);
+  }, []);
+
+  return {
+    data,
+    error,
+    isLoading: !data && !error,
+  };
 }
