@@ -4,9 +4,10 @@ import WalletAppProvider from "./WalletAppProvider";
 import "@solana/wallet-adapter-react-ui/styles.css";
 import "./index.css";
 
-// Polyfills needed for Solana libs in Vite/Vercel
+// Required polyfills for Solana + Jupiter on Vite/Vercel
 import { Buffer } from "buffer";
 import process from "process";
+
 (window as any).Buffer = Buffer;
 (window as any).process = process;
 
